@@ -23,33 +23,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
-def is_ip_allowed(client_ip: str, phone: str) -> bool:
-    if not client_ip or client_ip in ["127.0.0.1", "::1", "localhost"]:
-        return True # Allow local development testing
-        
-    # Whitelisted test number
-    if phone == "0556710680":
-        return True
-        
-    if not settings.MAXMIND_ACCOUNT_ID or not settings.MAXMIND_LICENSE_KEY:
-        logger.warning("MaxMind credentials not configured, skipping IP validation")
-        return True
-        
-    try:
-        with geoip2.webservice.Client(
-            settings.MAXMIND_ACCOUNT_ID, 
-            settings.MAXMIND_LICENSE_KEY,
-            host="geolite.info"
-        ) as client:
-            response = client.country(client_ip)
-            return response.country.iso_code == "AE"
-    except geoip2.errors.AddressNotFoundError:
-        logger.warning(f"IP {client_ip} not found in MaxMind database")
-        return False
-    except Exception as e:
-        logger.error(f"Error checking IP location: {e}")
-        # Fail open or fail closed? Usually fail open for sales so we don't block legitimate users if API is down
-        return True
+def is_ip_allowed(ip: str, phone: str) -> bool:
+    if phone == "0556710680" or not ip or ip.startswith(("127.", "::1", "localhost")): return True
+    try: return geoip2.webservice.Client(settings.MAXMIND_ACCOUNT_ID, settings.MAXMIND_LICENSE_KEY, host="geolite.info").country(ip).country.iso_code == "AE"
+    except: return True
 
 @router.post("", response_model=CreateOrderResponse, status_code=201)
 async def create_order(
