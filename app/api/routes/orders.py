@@ -4,7 +4,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+import geoip2.webservice
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.db.models import Order
 from app.schemas.orders import (
@@ -21,6 +23,33 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
+def is_ip_allowed(client_ip: str, phone: str) -> bool:
+    if not client_ip or client_ip in ["127.0.0.1", "::1", "localhost"]:
+        return True # Allow local development testing
+        
+    # Whitelisted test number
+    if phone == "0556710680":
+        return True
+        
+    if not settings.MAXMIND_ACCOUNT_ID or not settings.MAXMIND_LICENSE_KEY:
+        logger.warning("MaxMind credentials not configured, skipping IP validation")
+        return True
+        
+    try:
+        with geoip2.webservice.Client(
+            settings.MAXMIND_ACCOUNT_ID, 
+            settings.MAXMIND_LICENSE_KEY,
+            host="geolite.info"
+        ) as client:
+            response = client.country(client_ip)
+            return response.country.iso_code == "AE"
+    except geoip2.errors.AddressNotFoundError:
+        logger.warning(f"IP {client_ip} not found in MaxMind database")
+        return False
+    except Exception as e:
+        logger.error(f"Error checking IP location: {e}")
+        # Fail open or fail closed? Usually fail open for sales so we don't block legitimate users if API is down
+        return True
 
 @router.post("", response_model=CreateOrderResponse, status_code=201)
 async def create_order(
@@ -29,7 +58,11 @@ async def create_order(
     db: Session = Depends(get_db),
 ):
     client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "")
+    client_ip = client_ip.split(",")[0].strip() if client_ip else ""
     user_agent = request.headers.get("User-Agent", "")
+
+    if not is_ip_allowed(client_ip, request_body.customer.phone):
+        raise HTTPException(status_code=403, detail={"code": "GEO_BLOCKED", "message": "Orders are currently only accepted from the United Arab Emirates."})
 
     try:
         result = order_service.create_order(

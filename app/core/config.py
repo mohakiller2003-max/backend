@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     SNAP_PIXEL_ID: str = ""
     SNAP_ACCESS_TOKEN: str = ""
 
+    MAXMIND_ACCOUNT_ID: str = ""
+    MAXMIND_LICENSE_KEY: str = ""
+
     ORDER_WEBHOOK_TIMEOUT_SECONDS: int = 8
     LOG_LEVEL: str = "info"
 
