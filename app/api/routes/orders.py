@@ -16,6 +16,7 @@ from app.schemas.orders import (
     CreateOrderResponse,
 )
 from app.services import orders as order_service
+from app.services import cod_network as cod_network_service
 from app.services import sheets as sheet_service
 from app.services.tracking import meta, tiktok, snap
 
@@ -62,12 +63,21 @@ async def create_order(
 
 
 async def _post_order_tasks(order: Order, db: Session, fbp=None, fbc=None):
-    """Fire-and-forget: sheet webhook and CAPI — must not block order response."""
+    """Fire-and-forget: COD Network, sheet webhook, and CAPI — must not block order response."""
+    cod_ok, lead_id = await cod_network_service.create_lead(order)
+    if cod_ok:
+        order.status = "sent_to_cod"
+        if lead_id:
+            order.cod_lead_id = lead_id
+    elif settings.COD_NETWORK_API_TOKEN:
+        order.status = "failed_cod"
+
     sheet_ok = await sheet_service.send_order_to_sheet(order)
-    if sheet_ok:
+    if sheet_ok and order.status not in ("sent_to_cod",):
         order.status = "sent_to_sheet"
-    else:
+    elif not sheet_ok and order.status == "new":
         order.status = "failed_sheet"
+
     try:
         db.commit()
     except Exception:

@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     MAXMIND_ACCOUNT_ID: str = ""
     MAXMIND_LICENSE_KEY: str = ""
 
+    COD_NETWORK_API_URL: str = "https://api.cod.network/api/v2"
+    COD_NETWORK_API_TOKEN: str = ""
+    COD_NETWORK_WEBHOOK_SECRET: str = ""
+    COD_NETWORK_DEFAULT_REFERRAL_ID: str = ""
+    COD_NETWORK_REFERRAL_TRANEXAMIC: str = ""
+    COD_NETWORK_REFERRAL_AZELAIC: str = ""
+    COD_NETWORK_DEFAULT_COUNTRY: str = "AE"
+    COD_NETWORK_DEFAULT_CITY: str = ""
+    COD_NETWORK_PENDING_ADDRESS: str = "UAE - address to be confirmed by phone"
+
     ORDER_WEBHOOK_TIMEOUT_SECONDS: int = 8
     LOG_LEVEL: str = "info"
 

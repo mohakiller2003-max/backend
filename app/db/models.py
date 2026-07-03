@@ -49,6 +49,7 @@ class Order(Base):
     referrer = Column(Text)
 
     purchase_event_id = Column(String(256))
+    cod_lead_id = Column(String(64), nullable=True, index=True)
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
