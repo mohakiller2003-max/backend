@@ -10,13 +10,6 @@ class Settings(BaseSettings):
     API_BASE_URL: str = "https://api.skinouva.shop"
     FRONTEND_BASE_URL: str = "https://skinouva.shop"
     DATABASE_URL: str = ""
-
-    @field_validator("DATABASE_URL", mode="before")
-    @classmethod
-    def normalize_database_url(cls, value: str) -> str:
-        if isinstance(value, str) and value.startswith("postgres://"):
-            return value.replace("postgres://", "postgresql://", 1)
-        return value
     CORS_ORIGINS: str = "https://skinouva.shop,https://www.skinouva.shop"
 
     SHEETS_WEBHOOK_URL: str = ""
@@ -38,6 +31,13 @@ class Settings(BaseSettings):
 
     ORDER_WEBHOOK_TIMEOUT_SECONDS: int = 8
     LOG_LEVEL: str = "info"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        from app.db.url import normalize_database_url as normalize
+
+        return normalize(value) if isinstance(value, str) else value
 
     @property
     def cors_origins_list(self) -> List[str]:

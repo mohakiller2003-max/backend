@@ -1,6 +1,14 @@
 #!/bin/sh
 set -e
 
+if [ -n "$DATABASE_URL" ]; then
+  case "$DATABASE_URL" in
+    postgres://*)
+      export DATABASE_URL="postgresql://${DATABASE_URL#postgres://}"
+      ;;
+  esac
+fi
+
 echo "Running Alembic migrations..."
 alembic upgrade head
 
