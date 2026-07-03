@@ -49,7 +49,7 @@ class UpsellProduct(BaseModel):
 
 
 class CreateOrderResponse(BaseModel):
-    order_id: UUID
+    order_id: str
     order_number: str
     total_aed: float
     upsell: Optional[UpsellProduct] = None
@@ -62,7 +62,7 @@ class AcceptUpsellRequest(BaseModel):
 
 
 class AcceptUpsellResponse(BaseModel):
-    order_id: UUID
+    order_id: str
     order_number: str
     total_aed: float
     upsell_accepted: bool

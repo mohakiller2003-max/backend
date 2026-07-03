@@ -125,7 +125,7 @@ def create_order(
 
 def accept_upsell(
     db: Session,
-    order_id: UUID,
+    order_id: str,
     request: AcceptUpsellRequest,
 ) -> AcceptUpsellResponse:
     order = db.query(Order).filter(Order.id == order_id).first()

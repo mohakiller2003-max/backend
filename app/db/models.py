@@ -13,7 +13,7 @@ from app.db.session import Base
 class Order(Base):
     __tablename__ = "orders"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     order_number = Column(String(32), unique=True, nullable=False, index=True)
     locale = Column(String(8), nullable=False, default="ar")
 
@@ -22,11 +22,7 @@ class Order(Base):
     phone_e164 = Column(String(20), nullable=False)
 
     status = Column(
-        SAEnum(
-            "new", "upsell_added", "sent_to_sheet", "failed_sheet",
-            "confirmed", "cancelled",
-            name="order_status_enum",
-        ),
+        String(32),
         nullable=False,
         default="new",
     )
@@ -64,8 +60,8 @@ class Order(Base):
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = Column(String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
 
     product_id = Column(String(128), nullable=False)
     product_name_ar = Column(String(512), nullable=False)
@@ -73,7 +69,7 @@ class OrderItem(Base):
     quantity = Column(Integer, nullable=False)
     bundle_price_aed = Column(Numeric(10, 2), nullable=False)
     unit_context = Column(
-        SAEnum("bundle", "upsell", name="item_context_enum"),
+        String(32),
         nullable=False,
         default="bundle",
     )
@@ -86,8 +82,8 @@ class OrderItem(Base):
 class TrackingEvent(Base):
     __tablename__ = "tracking_events"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = Column(String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=True)
 
     event_name = Column(String(128), nullable=False)
     event_id = Column(String(256))

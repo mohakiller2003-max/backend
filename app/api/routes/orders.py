@@ -83,7 +83,7 @@ async def _post_order_tasks(order: Order, db: Session, fbp=None, fbc=None):
 
 @router.post("/{order_id}/upsell", response_model=AcceptUpsellResponse)
 async def accept_upsell(
-    order_id: UUID,
+    order_id: str,
     request_body: AcceptUpsellRequest,
     db: Session = Depends(get_db),
 ):

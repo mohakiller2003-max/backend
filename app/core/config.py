@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
@@ -9,6 +10,13 @@ class Settings(BaseSettings):
     API_BASE_URL: str = "https://api.skinouva.shop"
     FRONTEND_BASE_URL: str = "https://skinouva.shop"
     DATABASE_URL: str = ""
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        if isinstance(value, str) and value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql://", 1)
+        return value
     CORS_ORIGINS: str = "https://skinouva.shop,https://www.skinouva.shop"
 
     SHEETS_WEBHOOK_URL: str = ""

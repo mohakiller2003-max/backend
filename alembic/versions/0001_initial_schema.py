@@ -15,26 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("""
-        DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'order_status_enum') THEN
-                CREATE TYPE order_status_enum AS ENUM (
-                    'new', 'upsell_added', 'sent_to_sheet', 'failed_sheet', 'confirmed', 'cancelled'
-                );
-            END IF;
-        END $$;
-    """)
-    op.execute("""
-        DO $$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'item_context_enum') THEN
-                CREATE TYPE item_context_enum AS ENUM ('bundle', 'upsell');
-            END IF;
-        END $$;
-    """)
-
+    # Use SQLite compatible schema generation
     op.create_table(
         "orders",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("order_number", sa.String(32), nullable=False, unique=True),
         sa.Column("locale", sa.String(8), nullable=False, server_default="ar"),
         sa.Column("customer_name", sa.String(256), nullable=False),
@@ -42,11 +26,7 @@ def upgrade() -> None:
         sa.Column("phone_e164", sa.String(20), nullable=False),
         sa.Column(
             "status",
-            sa.Enum(
-                "new", "upsell_added", "sent_to_sheet", "failed_sheet", "confirmed", "cancelled",
-                name="order_status_enum",
-                create_type=False,
-            ),
+            sa.String(32),
             nullable=False,
             server_default="new",
         ),
@@ -75,8 +55,8 @@ def upgrade() -> None:
 
     op.create_table(
         "order_items",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("order_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("orders.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("order_id", sa.String(36), sa.ForeignKey("orders.id", ondelete="CASCADE"), nullable=False),
         sa.Column("product_id", sa.String(128), nullable=False),
         sa.Column("product_name_ar", sa.String(512), nullable=False),
         sa.Column("product_name_en", sa.String(512), nullable=False),
@@ -84,7 +64,7 @@ def upgrade() -> None:
         sa.Column("bundle_price_aed", sa.Numeric(10, 2), nullable=False),
         sa.Column(
             "unit_context",
-            sa.Enum("bundle", "upsell", name="item_context_enum", create_type=False),
+            sa.String(32),
             nullable=False,
             server_default="bundle",
         ),
@@ -93,8 +73,8 @@ def upgrade() -> None:
 
     op.create_table(
         "tracking_events",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("order_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("orders.id", ondelete="CASCADE"), nullable=True),
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("order_id", sa.String(36), sa.ForeignKey("orders.id", ondelete="CASCADE"), nullable=True),
         sa.Column("event_name", sa.String(128), nullable=False),
         sa.Column("event_id", sa.String(256)),
         sa.Column("platform", sa.String(64), nullable=False),
@@ -109,5 +89,3 @@ def downgrade() -> None:
     op.drop_table("tracking_events")
     op.drop_table("order_items")
     op.drop_table("orders")
-    op.execute("DROP TYPE IF EXISTS item_context_enum")
-    op.execute("DROP TYPE IF EXISTS order_status_enum")
