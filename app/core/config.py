@@ -61,6 +61,7 @@ settings = Settings()
 PRODUCT_CATALOG = {
     "tranexamic-niacinamide-serum": {
         "id": "tranexamic-niacinamide-serum",
+        "sku": "SKNV-TNM-8842",
         "name_ar": "سيروم الترانيكساميك + النياسيناميد ضد البقع الداكنة وتفاوت لون البشرة",
         "name_en": "Tranexamic + Niacinamide Dark Spot Serum",
         "offers": {1: 199, 2: 279, 3: 349},
@@ -69,6 +70,7 @@ PRODUCT_CATALOG = {
     },
     "azelaic-acne-marks-serum": {
         "id": "azelaic-acne-marks-serum",
+        "sku": "SKNV-AZL-3391",
         "name_ar": "سيروم الأزيليك لحب الشباب الهرموني وآثاره",
         "name_en": "Azelaic Serum for Hormonal Acne and Marks",
         "offers": {1: 199, 2: 279, 3: 349},

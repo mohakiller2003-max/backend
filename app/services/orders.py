@@ -22,9 +22,12 @@ logger = logging.getLogger(__name__)
 ORDER_COUNTER_START = 10001
 
 
+ORDER_NUMBER_PREFIX = "NAMA"
+
+
 def _next_order_number(db: Session) -> str:
     count = db.query(Order).count()
-    return f"SKN-{ORDER_COUNTER_START + count}"
+    return f"{ORDER_NUMBER_PREFIX}-{ORDER_COUNTER_START + count}"
 
 
 def _recalculate_total(items: list) -> Decimal:

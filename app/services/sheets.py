@@ -1,21 +1,55 @@
-import json
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from app.core.config import settings
+from app.core.config import PRODUCT_CATALOG, settings
 from app.db.models import Order
 
 logger = logging.getLogger(__name__)
 
+UAE_TZ = timezone(timedelta(hours=4))
 
-def _build_items_summary(order: Order) -> str:
-    parts = []
+
+def _format_sheet_date(order: Order) -> str:
+    created = order.created_at or datetime.utcnow()
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return created.astimezone(UAE_TZ).strftime("%d/%m/%Y")
+
+
+def _format_phone_digits(phone_e164: str) -> str:
+    digits = re.sub(r"\D", "", phone_e164 or "")
+    if digits.startswith("00"):
+        digits = digits[2:]
+    return digits
+
+
+def _build_sheet_fields(order: Order) -> dict[str, str | float]:
+    product_names: list[str] = []
+    skus: list[str] = []
+    quantities: list[str] = []
+
     for item in order.items:
-        name = item.product_name_en
-        parts.append(f"{item.quantity}x {name} ({item.unit_context}) = {float(item.bundle_price_aed)} AED")
-    return "; ".join(parts)
+        catalog = PRODUCT_CATALOG.get(item.product_id, {})
+        product_names.append(item.product_name_ar or catalog.get("name_ar", item.product_id))
+        skus.append(catalog.get("sku", item.product_id))
+        quantities.append(str(item.quantity))
+
+    return {
+        "date": _format_sheet_date(order),
+        "order_id": order.order_number,
+        "country": "UAE",
+        "name": order.customer_name,
+        "phone": _format_phone_digits(order.phone_e164 or order.phone_raw),
+        "product": "/".join(product_names),
+        "sku": "/".join(skus),
+        "quantity": "/".join(quantities),
+        "total_price": float(order.total_aed),
+        "currency": "AED",
+        "status": "",
+    }
 
 
 async def send_order_to_sheet(order: Order) -> bool:
@@ -28,34 +62,10 @@ async def send_order_to_sheet(order: Order) -> bool:
         logger.warning("SHEETS_WEBHOOK_URL not configured, skipping sheet webhook.")
         return False
 
+    sheet_fields = _build_sheet_fields(order)
     payload = {
         "webhook_secret": settings.SHEETS_WEBHOOK_SECRET,
-        "created_at": order.created_at.isoformat() if order.created_at else datetime.utcnow().isoformat(),
-        "order_number": order.order_number,
-        "order_id": str(order.id),
-        "status": order.status,
-        "locale": order.locale,
-        "customer_name": order.customer_name,
-        "phone_raw": order.phone_raw,
-        "phone_e164": order.phone_e164,
-        "items_summary": _build_items_summary(order),
-        "subtotal_aed": float(order.subtotal_aed),
-        "upsell_total_aed": float(order.upsell_total_aed),
-        "total_aed": float(order.total_aed),
-        "currency": order.currency,
-        "payment_method": order.payment_method,
-        "utm_source": order.utm_source or "",
-        "utm_medium": order.utm_medium or "",
-        "utm_campaign": order.utm_campaign or "",
-        "utm_content": order.utm_content or "",
-        "utm_term": order.utm_term or "",
-        "fbclid": order.fbclid or "",
-        "ttclid": order.ttclid or "",
-        "sc_click_id": order.sc_click_id or "",
-        "landing_page": order.landing_page or "",
-        "referrer": order.referrer or "",
-        "purchase_event_id": order.purchase_event_id or "",
-        "notes": "",
+        **sheet_fields,
     }
 
     try:
