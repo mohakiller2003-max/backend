@@ -53,7 +53,7 @@ async def _send_to_apps_script(
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}secret={settings.SHEETS_WEBHOOK_SECRET}"
 
-    post_response = await client.post(url, data=form, follow_redirects=False)
+    post_response = await client.post(url, json=form, follow_redirects=False)
 
     if post_response.status_code in REDIRECT_STATUS:
         location = post_response.headers.get("location")
