@@ -122,7 +122,8 @@ async def send_order_to_sheet(order: Order) -> bool:
                         order.order_number,
                         response.text[:300],
                     )
-                    return False            logger.warning(
+                    return False
+            logger.warning(
                 "Sheet webhook non-200 order=%s status=%s body=%s",
                 order.order_number,
                 response.status_code,
