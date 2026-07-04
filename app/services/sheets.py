@@ -10,6 +10,29 @@ from app.db.models import Order
 logger = logging.getLogger(__name__)
 
 UAE_TZ = timezone(timedelta(hours=4))
+REDIRECT_STATUS = {301, 302, 303, 307, 308}
+
+
+async def _post_apps_script(
+    client: httpx.AsyncClient,
+    url: str,
+    payload: dict[str, object],
+) -> httpx.Response:
+    """
+    Google Apps Script /exec URLs respond with HTTP 302.
+    httpx follow_redirects converts POST→GET and drops the JSON body, so the
+    script receives {} and returns UNAUTHORIZED. Re-POST manually to Location.
+    """
+    current_url = url
+    for _ in range(5):
+        response = await client.post(current_url, json=payload, follow_redirects=False)
+        if response.status_code not in REDIRECT_STATUS:
+            return response
+        location = response.headers.get("location")
+        if not location:
+            return response
+        current_url = location
+    return response
 
 
 def _format_sheet_date(order: Order) -> str:
@@ -71,27 +94,38 @@ async def send_order_to_sheet(order: Order) -> bool:
     try:
         async with httpx.AsyncClient(
             timeout=settings.ORDER_WEBHOOK_TIMEOUT_SECONDS,
-            follow_redirects=True,
+            follow_redirects=False,
         ) as client:
             url = settings.SHEETS_WEBHOOK_URL
             if settings.SHEETS_WEBHOOK_SECRET:
                 sep = "&" if "?" in url else "?"
                 url = f"{url}{sep}secret={settings.SHEETS_WEBHOOK_SECRET}"
-            response = await client.post(url, json=payload)
+            response = await _post_apps_script(client, url, payload)
             if response.status_code == 200:
                 try:
                     body = response.json()
                     if body.get("ok") is True:
                         logger.info("Sheet webhook success order=%s", order.order_number)
                         return True
+                    logger.warning(
+                        "Sheet webhook rejected order=%s error=%s body=%s",
+                        order.order_number,
+                        body.get("error"),
+                        response.text[:300],
+                    )
+                    return False
                 except Exception:
-                    logger.info("Sheet webhook success order=%s (non-json 200)", order.order_number)
-                    return True
+                    logger.warning(
+                        "Sheet webhook invalid JSON order=%s body=%s",
+                        order.order_number,
+                        response.text[:300],
+                    )
+                    return False
             logger.warning(
                 "Sheet webhook non-200 order=%s status=%s body=%s",
                 order.order_number,
                 response.status_code,
-                response.text[:200],
+                response.text[:300],
             )
             return False
     except Exception as exc:
