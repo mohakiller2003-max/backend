@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 ORDER_COUNTER_START = 10001
 
 
-ORDER_NUMBER_PREFIX = "NAMA"
+ORDER_NUMBER_PREFIX = "SKINOVA"
 
 
 def _next_order_number(db: Session) -> str:
