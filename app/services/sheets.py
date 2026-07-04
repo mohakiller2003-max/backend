@@ -2,7 +2,6 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode
 
 import httpx
 
@@ -12,30 +11,64 @@ from app.db.models import Order
 logger = logging.getLogger(__name__)
 
 UAE_TZ = timezone(timedelta(hours=4))
+REDIRECT_STATUS = {301, 302, 303, 307, 308}
 
 
-def _parse_apps_script_response(text: str) -> dict:
+def _parse_apps_script_response(text: str) -> dict | None:
     cleaned = text.strip()
     if cleaned.startswith(")]}'"):
         cleaned = cleaned[4:].strip()
-    return json.loads(cleaned)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r'\{[^{}]*"ok"\s*:\s*true[^{}]*\}', cleaned)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                return None
+        return None
 
 
-async def _call_apps_script(
+def _response_is_ok(response: httpx.Response) -> bool:
+    body = _parse_apps_script_response(response.text)
+    if body and body.get("ok") is True:
+        return True
+    return '"ok":true' in response.text.replace(" ", "") or '"ok": true' in response.text
+
+
+async def _send_to_apps_script(
     client: httpx.AsyncClient,
     base_url: str,
     payload: dict[str, object],
-) -> httpx.Response:
+) -> tuple[bool, str]:
     """
-    Google Apps Script web apps are most reliable over GET.
-    Redirect chain stays GET end-to-end (no 405 on echo URL).
+    Google Apps Script web apps:
+    - POST form → doPost runs → 302 to echo URL
+    - Echo URL accepts GET only → read JSON result there
     """
-    params = {k: "" if v is None else str(v) for k, v in payload.items()}
+    form = {k: "" if v is None else str(v) for k, v in payload.items()}
+    url = base_url.rstrip("/")
     if settings.SHEETS_WEBHOOK_SECRET:
-        params["secret"] = settings.SHEETS_WEBHOOK_SECRET
-    query = urlencode(params)
-    url = f"{base_url.rstrip('/')}?{query}"
-    return await client.get(url, follow_redirects=True)
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}secret={settings.SHEETS_WEBHOOK_SECRET}"
+
+    post_response = await client.post(url, data=form, follow_redirects=False)
+
+    if post_response.status_code in REDIRECT_STATUS:
+        location = post_response.headers.get("location")
+        if not location:
+            return False, f"redirect without location (post={post_response.status_code})"
+        get_response = await client.get(location, follow_redirects=True)
+        if _response_is_ok(get_response):
+            return True, "ok"
+        return False, f"redirect GET status={get_response.status_code} body={get_response.text[:200]}"
+
+    if post_response.status_code == 200 and _response_is_ok(post_response):
+        return True, "ok"
+
+    return False, f"post status={post_response.status_code} body={post_response.text[:200]}"
+
 
 def _format_sheet_date(order: Order) -> str:
     created = order.created_at or datetime.utcnow()
@@ -78,58 +111,35 @@ def _build_sheet_fields(order: Order) -> dict[str, str | float]:
 
 
 async def send_order_to_sheet(order: Order) -> bool:
-    """
-    Forward order to Google Sheets via Apps Script webhook.
-    Returns True on success, False on failure.
-    Never raises — sheet failure must not break the order flow.
-    """
+    """Forward order to Google Sheets. Never raises."""
     if not settings.SHEETS_WEBHOOK_URL:
         logger.warning("SHEETS_WEBHOOK_URL not configured, skipping sheet webhook.")
         return False
 
-    sheet_fields = _build_sheet_fields(order)
+    if not order.items:
+        logger.warning("Sheet webhook skipped order=%s — no order items loaded", order.order_number)
+        return False
+
     payload = {
         "webhook_secret": settings.SHEETS_WEBHOOK_SECRET,
-        **sheet_fields,
+        **_build_sheet_fields(order),
     }
 
     try:
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.ORDER_WEBHOOK_TIMEOUT_SECONDS, connect=5.0),
-            follow_redirects=True,
+            timeout=httpx.Timeout(20.0, connect=8.0),
+            follow_redirects=False,
         ) as client:
-            response = await _call_apps_script(
+            ok, detail = await _send_to_apps_script(
                 client,
                 settings.SHEETS_WEBHOOK_URL,
                 payload,
             )
-            if response.status_code == 200:
-                try:
-                    body = _parse_apps_script_response(response.text)
-                    if body.get("ok") is True:
-                        logger.info("Sheet webhook success order=%s", order.order_number)
-                        return True
-                    logger.warning(
-                        "Sheet webhook rejected order=%s error=%s body=%s",
-                        order.order_number,
-                        body.get("error"),
-                        response.text[:300],
-                    )
-                    return False
-                except Exception:
-                    logger.warning(
-                        "Sheet webhook invalid JSON order=%s body=%s",
-                        order.order_number,
-                        response.text[:300],
-                    )
-                    return False
-            logger.warning(
-                "Sheet webhook non-200 order=%s status=%s body=%s",
-                order.order_number,
-                response.status_code,
-                response.text[:300],
-            )
+            if ok:
+                logger.info("Sheet webhook success order=%s", order.order_number)
+                return True
+            logger.warning("Sheet webhook failed order=%s detail=%s", order.order_number, detail)
             return False
     except Exception as exc:
-        logger.error("Sheet webhook error order=%s error=%s", order.order_number, str(exc))
+        logger.error("Sheet webhook error order=%s error=%s", order.order_number, str(exc) or type(exc).__name__)
         return False

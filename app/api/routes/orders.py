@@ -2,7 +2,7 @@ import asyncio
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 import geoip2.webservice
 
@@ -56,6 +56,7 @@ def is_ip_allowed(ip: str, phone: str) -> bool:
 async def create_order(
     request_body: CreateOrderRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "")
@@ -80,7 +81,7 @@ async def create_order(
     if order:
         fbp = getattr(request_body.tracking, "fbp", None)
         fbc = getattr(request_body.tracking, "fbc", None)
-        asyncio.create_task(_post_order_tasks(str(order.id), fbp=fbp, fbc=fbc))
+        background_tasks.add_task(_post_order_tasks, str(order.id), fbp, fbc)
 
     return result
 
