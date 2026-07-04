@@ -19,20 +19,20 @@ async def _post_apps_script(
     payload: dict[str, object],
 ) -> httpx.Response:
     """
-    Google Apps Script /exec URLs respond with HTTP 302.
-    httpx follow_redirects converts POST→GET and drops the JSON body, so the
-    script receives {} and returns UNAUTHORIZED. Re-POST manually to Location.
+    Google Apps Script /exec flow:
+    1. POST form fields → doPost runs → HTTP 302 to googleusercontent echo URL
+    2. Echo URL only accepts GET (POST returns 405) → GET to read JSON result
     """
-    current_url = url
-    for _ in range(5):
-        response = await client.post(current_url, json=payload, follow_redirects=False)
-        if response.status_code not in REDIRECT_STATUS:
-            return response
-        location = response.headers.get("location")
-        if not location:
-            return response
-        current_url = location
-    return response
+    form = {k: "" if v is None else str(v) for k, v in payload.items()}
+    response = await client.post(url, data=form, follow_redirects=False)
+    if response.status_code not in REDIRECT_STATUS:
+        return response
+
+    location = response.headers.get("location")
+    if not location:
+        return response
+
+    return await client.get(location, follow_redirects=True)
 
 
 def _format_sheet_date(order: Order) -> str:
@@ -93,7 +93,7 @@ async def send_order_to_sheet(order: Order) -> bool:
 
     try:
         async with httpx.AsyncClient(
-            timeout=settings.ORDER_WEBHOOK_TIMEOUT_SECONDS,
+            timeout=httpx.Timeout(settings.ORDER_WEBHOOK_TIMEOUT_SECONDS, connect=5.0),
             follow_redirects=False,
         ) as client:
             url = settings.SHEETS_WEBHOOK_URL
