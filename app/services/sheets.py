@@ -121,6 +121,7 @@ async def send_order_to_sheet(order: Order) -> bool:
         return False
 
     payload = {
+        "secret": settings.SHEETS_WEBHOOK_SECRET,
         "webhook_secret": settings.SHEETS_WEBHOOK_SECRET,
         **_build_sheet_fields(order),
     }
