@@ -20,14 +20,37 @@ from app.services import cod_network as cod_network_service
 from app.services import sheets as sheet_service
 from app.services.tracking import meta, tiktok, snap
 
+from app.utils.phone import InvalidPhoneError, normalize_uae_phone
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
+TEST_PHONE_E164 = "+971556710680"
+
+
 def is_ip_allowed(ip: str, phone: str) -> bool:
-    if phone == "0556710680" or not ip or ip.startswith(("127.", "::1", "localhost")): return True
-    try: return geoip2.webservice.Client(settings.MAXMIND_ACCOUNT_ID, settings.MAXMIND_LICENSE_KEY, host="geolite.info").country(ip).country.iso_code == "AE"
-    except: return True
+    if not ip or ip.startswith(("127.", "::1", "localhost")):
+        return True
+
+    try:
+        if normalize_uae_phone(phone) == TEST_PHONE_E164:
+            return True
+    except InvalidPhoneError:
+        pass
+
+    if not settings.MAXMIND_ACCOUNT_ID or not settings.MAXMIND_LICENSE_KEY:
+        return True
+
+    try:
+        client = geoip2.webservice.Client(
+            settings.MAXMIND_ACCOUNT_ID,
+            settings.MAXMIND_LICENSE_KEY,
+            host="geolite.info",
+        )
+        return client.country(ip).country.iso_code == "AE"
+    except Exception:
+        return True
 
 @router.post("", response_model=CreateOrderResponse, status_code=201)
 async def create_order(
