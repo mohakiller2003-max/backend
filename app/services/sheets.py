@@ -69,15 +69,24 @@ async def send_order_to_sheet(order: Order) -> bool:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=settings.ORDER_WEBHOOK_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=settings.ORDER_WEBHOOK_TIMEOUT_SECONDS,
+            follow_redirects=True,
+        ) as client:
             url = settings.SHEETS_WEBHOOK_URL
             if settings.SHEETS_WEBHOOK_SECRET:
                 sep = "&" if "?" in url else "?"
                 url = f"{url}{sep}secret={settings.SHEETS_WEBHOOK_SECRET}"
             response = await client.post(url, json=payload)
             if response.status_code == 200:
-                logger.info("Sheet webhook success order=%s", order.order_number)
-                return True
+                try:
+                    body = response.json()
+                    if body.get("ok") is True:
+                        logger.info("Sheet webhook success order=%s", order.order_number)
+                        return True
+                except Exception:
+                    logger.info("Sheet webhook success order=%s (non-json 200)", order.order_number)
+                    return True
             logger.warning(
                 "Sheet webhook non-200 order=%s status=%s body=%s",
                 order.order_number,
