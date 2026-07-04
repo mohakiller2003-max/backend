@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, String, Integer, Numeric, Text, DateTime, ForeignKey, Enum as SAEnum
+    Boolean, Column, String, Integer, Numeric, Text, DateTime, ForeignKey, Enum as SAEnum
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -44,6 +44,8 @@ class Order(Base):
     sc_click_id = Column(String(512))
 
     client_ip = Column(String(64))
+    country_code = Column(String(8))
+    is_uae_ip = Column(Boolean, nullable=False, default=False)
     user_agent = Column(Text)
     landing_page = Column(Text)
     referrer = Column(Text)
@@ -96,3 +98,23 @@ class TrackingEvent(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     order = relationship("Order", back_populates="tracking_events")
+
+
+class AnalyticsEvent(Base):
+    __tablename__ = "analytics_events"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_type = Column(String(64), nullable=False, index=True)
+    session_id = Column(String(64), nullable=False, index=True)
+    page_path = Column(String(512))
+    product_id = Column(String(128))
+    locale = Column(String(8))
+    client_ip = Column(String(64))
+    country_code = Column(String(8))
+    is_uae_ip = Column(Boolean, nullable=False, default=False, index=True)
+    utm_source = Column(String(256))
+    utm_medium = Column(String(256))
+    utm_campaign = Column(String(256))
+    referrer = Column(Text)
+    user_agent = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)

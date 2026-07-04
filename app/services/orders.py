@@ -49,6 +49,8 @@ def create_order(
     request: CreateOrderRequest,
     client_ip: Optional[str] = None,
     user_agent: Optional[str] = None,
+    country_code: Optional[str] = None,
+    is_uae_ip: bool = False,
 ) -> CreateOrderResponse:
     try:
         phone_e164 = normalize_uae_phone(request.customer.phone)
@@ -74,6 +76,8 @@ def create_order(
         currency="AED",
         payment_method="COD",
         client_ip=client_ip,
+        country_code=country_code,
+        is_uae_ip=is_uae_ip,
         user_agent=user_agent,
         purchase_event_id=getattr(tracking, "purchase_event_id", None),
         utm_source=getattr(tracking, "utm_source", None),

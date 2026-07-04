@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     ORDER_WEBHOOK_TIMEOUT_SECONDS: int = 8
     LOG_LEVEL: str = "info"
 
+    ADMIN_USERNAME: str = ""
+    ADMIN_PASSWORD: str = ""
+    ADMIN_SESSION_SECRET: str = ""
+    ADMIN_SESSION_TTL_SECONDS: int = 604800
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:

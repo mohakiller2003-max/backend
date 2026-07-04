@@ -1,25 +1,23 @@
 import asyncio
 import logging
-from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
-import geoip2.webservice
 
 from app.core.config import settings
-from app.db.session import SessionLocal, get_db
 from app.db.models import Order
+from app.db.session import SessionLocal, get_db
 from app.schemas.orders import (
     AcceptUpsellRequest,
     AcceptUpsellResponse,
     CreateOrderRequest,
     CreateOrderResponse,
 )
-from app.services import orders as order_service
 from app.services import cod_network as cod_network_service
+from app.services import orders as order_service
 from app.services import sheets as sheet_service
-from app.services.tracking import meta, tiktok, snap
-
+from app.services.tracking import meta, snap, tiktok
+from app.utils.geoip import lookup_country
 from app.utils.phone import InvalidPhoneError, normalize_uae_phone
 
 logger = logging.getLogger(__name__)
@@ -39,18 +37,7 @@ def is_ip_allowed(ip: str, phone: str) -> bool:
     except InvalidPhoneError:
         pass
 
-    if not settings.MAXMIND_ACCOUNT_ID or not settings.MAXMIND_LICENSE_KEY:
-        return True
-
-    try:
-        client = geoip2.webservice.Client(
-            settings.MAXMIND_ACCOUNT_ID,
-            settings.MAXMIND_LICENSE_KEY,
-            host="geolite.info",
-        )
-        return client.country(ip).country.iso_code == "AE"
-    except Exception:
-        return True
+    return lookup_country(ip).is_uae
 
 @router.post("", response_model=CreateOrderResponse, status_code=201)
 async def create_order(
@@ -66,12 +53,16 @@ async def create_order(
     if not is_ip_allowed(client_ip, request_body.customer.phone):
         raise HTTPException(status_code=403, detail={"code": "GEO_BLOCKED", "message": "Orders are currently only accepted from the United Arab Emirates."})
 
+    geo = lookup_country(client_ip)
+
     try:
         result = order_service.create_order(
             db=db,
             request=request_body,
             client_ip=client_ip,
             user_agent=user_agent,
+            country_code=geo.country_code,
+            is_uae_ip=geo.is_uae,
         )
     except ValueError as exc:
         code = str(exc).split(":")[0]
