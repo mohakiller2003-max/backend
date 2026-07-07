@@ -11,6 +11,21 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
+_capi_platforms = []
+if settings.META_PIXEL_ID and settings.META_ACCESS_TOKEN:
+    _capi_platforms.append(f"Meta({settings.META_PIXEL_ID[:6]}…)")
+if settings.TIKTOK_PIXEL_ID and settings.TIKTOK_ACCESS_TOKEN:
+    _capi_platforms.append(f"TikTok({settings.TIKTOK_PIXEL_ID[:6]}…)")
+if settings.SNAP_PIXEL_ID and settings.SNAP_ACCESS_TOKEN:
+    _capi_platforms.append(f"Snap({settings.SNAP_PIXEL_ID[:6]}…)")
+
+if _capi_platforms:
+    logger.info("[CAPI] configured platforms: %s", ", ".join(_capi_platforms))
+else:
+    logger.warning("[CAPI] no platforms configured — set PIXEL_ID + ACCESS_TOKEN env vars")
+
 app = FastAPI(
     title="Skinouva API",
     version="1.0.0",

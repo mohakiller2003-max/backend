@@ -70,8 +70,13 @@ async def create_order(
 
     order = db.query(Order).filter(Order.id == result.order_id).first()
     if order:
-        fbp = getattr(request_body.tracking, "fbp", None)
-        fbc = getattr(request_body.tracking, "fbc", None)
+        fbp = getattr(request_body.tracking, "fbp", None) if request_body.tracking else None
+        fbc = getattr(request_body.tracking, "fbc", None) if request_body.tracking else None
+        logger.info(
+            "Scheduling CAPI for order=%s event_id=%s",
+            order.order_number,
+            order.purchase_event_id or order.id,
+        )
         background_tasks.add_task(_post_order_tasks, str(order.id), fbp, fbc)
 
     return result
@@ -110,12 +115,18 @@ async def _post_order_tasks(order_id: str, fbp=None, fbc=None):
         except Exception:
             logger.exception("Post-order tasks commit failed order=%s", order.order_number)
 
-        await asyncio.gather(
+        results = await asyncio.gather(
             meta.send_purchase_event(order, fbp=fbp, fbc=fbc),
             tiktok.send_purchase_event(order),
             snap.send_purchase_event(order),
             return_exceptions=True,
         )
+        labels = ("Meta", "TikTok", "Snap")
+        for label, result in zip(labels, results):
+            if isinstance(result, Exception):
+                logger.error("[CAPI:%s] unhandled error order=%s: %s", label, order.order_number, result)
+            else:
+                logger.info("[CAPI:%s] purchase result order=%s ok=%s", label, order.order_number, result)
     finally:
         db.close()
 

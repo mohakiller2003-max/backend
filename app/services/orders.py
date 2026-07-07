@@ -61,7 +61,7 @@ def create_order(
     total = subtotal
 
     order_number = _next_order_number(db)
-    tracking = request.tracking or {}
+    tracking = request.tracking
 
     order = Order(
         order_number=order_number,
@@ -79,17 +79,17 @@ def create_order(
         country_code=country_code,
         is_uae_ip=is_uae_ip,
         user_agent=user_agent,
-        purchase_event_id=getattr(tracking, "purchase_event_id", None),
-        utm_source=getattr(tracking, "utm_source", None),
-        utm_medium=getattr(tracking, "utm_medium", None),
-        utm_campaign=getattr(tracking, "utm_campaign", None),
-        utm_content=getattr(tracking, "utm_content", None),
-        utm_term=getattr(tracking, "utm_term", None),
-        fbclid=getattr(tracking, "fbclid", None),
-        ttclid=getattr(tracking, "ttclid", None),
-        sc_click_id=getattr(tracking, "sc_click_id", None),
-        landing_page=getattr(tracking, "landing_page", None),
-        referrer=getattr(tracking, "referrer", None),
+        purchase_event_id=tracking.purchase_event_id if tracking else None,
+        utm_source=tracking.utm_source if tracking else None,
+        utm_medium=tracking.utm_medium if tracking else None,
+        utm_campaign=tracking.utm_campaign if tracking else None,
+        utm_content=tracking.utm_content if tracking else None,
+        utm_term=tracking.utm_term if tracking else None,
+        fbclid=tracking.fbclid if tracking else None,
+        ttclid=tracking.ttclid if tracking else None,
+        sc_click_id=tracking.sc_click_id if tracking else None,
+        landing_page=tracking.landing_page if tracking else None,
+        referrer=tracking.referrer if tracking else None,
     )
     db.add(order)
     db.flush()
