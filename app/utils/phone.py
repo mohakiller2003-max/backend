@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 
 
 class InvalidPhoneError(ValueError):
@@ -48,6 +49,18 @@ def meta_hash_phone(phone_e164: str) -> str:
 
     normalized = re.sub(r"[^\d]", "", phone_e164)
     return hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def meta_hash_first_name(name: str) -> Optional[str]:
+    """SHA-256 hex of lowercase first name for Meta CAPI fn matching."""
+    import hashlib
+
+    if not name:
+        return None
+    first = name.strip().split()[0].lower()
+    if not first:
+        return None
+    return hashlib.sha256(first.encode("utf-8")).hexdigest()
 
 
 def tiktok_hash_phone(phone_e164: str) -> str:

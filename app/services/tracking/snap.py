@@ -5,6 +5,7 @@ import httpx
 
 from app.core.config import settings
 from app.db.models import Order
+from app.services.tracking.capi_log import log_capi_error, log_capi_fail, log_capi_ok, log_capi_send, log_capi_skip
 from app.utils.phone import snap_hash_phone
 
 logger = logging.getLogger(__name__)
@@ -15,22 +16,24 @@ def _snap_capi_url() -> str:
 
 
 async def send_purchase_event(order: Order) -> bool:
-    """Send PURCHASE server-side event to Snapchat Conversions API v3."""
+    """Send PURCHASE to Snapchat Conversions API v3 (hashed phone on server)."""
     if not settings.SNAP_PIXEL_ID or not settings.SNAP_ACCESS_TOKEN:
-        logger.info("Snapchat CAPI not configured, skipping.")
+        log_capi_skip("Snap", "SNAP_PIXEL_ID or SNAP_ACCESS_TOKEN not set")
         return False
 
-    phone_hash = snap_hash_phone(order.phone_e164)
     event_id = order.purchase_event_id or str(order.id)
+    log_capi_send("Snap", order.order_number, event_id)
 
+    phone_hash = snap_hash_phone(order.phone_e164)
+
+    bundle_items = [item for item in order.items if item.unit_context == "bundle"]
     contents = [
         {
             "id": item.product_id,
             "quantity": str(item.quantity),
             "item_price": str(float(item.bundle_price_aed)),
         }
-        for item in order.items
-        if item.unit_context == "bundle"
+        for item in bundle_items
     ]
 
     user_data: dict = {
@@ -52,9 +55,9 @@ async def send_purchase_event(order: Order) -> bool:
             "currency": "AED",
             "value": str(float(order.total_aed)),
             "order_id": order.order_number,
-            "content_ids": [item.product_id for item in order.items if item.unit_context == "bundle"],
+            "content_ids": [item.product_id for item in bundle_items],
             "contents": contents,
-            "num_items": sum(item.quantity for item in order.items if item.unit_context == "bundle"),
+            "num_items": sum(item.quantity for item in bundle_items),
         },
     }
 
@@ -63,36 +66,22 @@ async def send_purchase_event(order: Order) -> bool:
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(
-                _snap_capi_url(),
-                params=params,
-                json=payload,
-            )
+            response = await client.post(_snap_capi_url(), params=params, json=payload)
+            try:
+                body = response.json() if response.content else {}
+            except ValueError:
+                body = {"raw": response.text[:500]}
+
             if response.status_code in (200, 204):
-                body: dict = {}
-                if response.content:
-                    try:
-                        body = response.json()
-                    except ValueError:
-                        body = {}
-                status = str(body.get("status", "VALID")).upper()
+                status = str(body.get("status", "VALID")).upper() if isinstance(body, dict) else "VALID"
                 if status in ("VALID", "SUCCESS", "OK", ""):
-                    logger.info("Snap CAPI purchase sent order=%s", order.order_number)
+                    log_capi_ok("Snap", order.order_number, event_id, response.status_code, body)
                     return True
-                logger.warning(
-                    "Snap CAPI rejected order=%s status=%s body=%s",
-                    order.order_number,
-                    status,
-                    response.text[:300],
-                )
+                log_capi_fail("Snap", order.order_number, event_id, response.status_code, body)
                 return False
-            logger.warning(
-                "Snap CAPI non-200 order=%s status=%s body=%s",
-                order.order_number,
-                response.status_code,
-                response.text[:300],
-            )
+
+            log_capi_fail("Snap", order.order_number, event_id, response.status_code, body)
             return False
     except Exception as exc:
-        logger.error("Snap CAPI error order=%s error=%s", order.order_number, str(exc))
+        log_capi_error("Snap", order.order_number, event_id, exc)
         return False
